@@ -1,0 +1,118 @@
+/*============================================================================================================
+*Class Name     : SalesInvoiceTriggerHandler
+*Description    : All the implementations related to TaskTriggers should be handled here
+*Company        : Merfantz Technology Pvt Ltd.
+*Date           : 29th Oct, 2020
+*Version        : 1.0
+*Change History : Initial Trigger Handler
+*Methods        : public void onAfterInsert(Map<Id,Task> newMap)
+                  public void onAfterUpdate(Map<Id,Task> newMap,Map<Id,Task> oldMap) 
+                  public void onAfterDelete(Map<Id,Task> oldMap)  
+                  public void onAfterUndelete(Map<Id,Task> newMap)  
+                  public void meaningfulContactRollup(Map<Id,Task> newMap,Map<Id,Task> oldMap)                       
+*============================================================================================================*/
+
+public class TaskTriggerHandler{
+/*====================================================
+*Method Name     : onAfterInsert
+*Description     : This method executes when Task Inserts.
+*Arguments       : Map<Id,Task> newMap
+*Ticket No       : 50973
+====================================================*/
+   public void onAfterInsert(Map<Id,Task> newMap){
+      meaningfulContactRollup(newMap,null);
+   }
+/*====================================================
+*Method Name     : onAfterUpdate
+*Description     : This method executes when Task updates.
+*Arguments       : Map<Id,Task> newMap,Map<Id,Task> oldMap
+*Ticket No       : 50973
+====================================================*/   
+   public void onAfterUpdate(Map<Id,Task> newMap,Map<Id,Task> oldMap){
+       meaningfulContactRollup(newMap,oldMap);
+   }
+   
+/*====================================================
+*Method Name     : onAfterDelete
+*Description     : This method executes when Task delete.
+*Arguments       : Map<Id,Task> oldMap
+*Ticket No       : 50973
+====================================================*/   
+   public void onAfterDelete(Map<Id,Task> oldMap){
+       meaningfulContactRollup(oldMap,null);
+   
+   }
+/*====================================================
+*Method Name     : onAfterUndelete
+*Description     : This method executes when Task undelete.
+*Arguments       : Map<Id,Task> oldMap
+*Ticket No       : 50973
+====================================================*/   
+   public void onAfterUndelete(Map<Id,Task> newMap){
+       meaningfulContactRollup(newMap,null);   
+   }
+   
+/*====================================================
+*Method Name     : meaningfulContactRollup
+*Description     : This method executes to update MeaningfulConacts in Activity as a custom roll up function.
+*Arguments       : Map<Id,Task> oldMap
+*Ticket No       : 50973
+====================================================*/   
+
+   //rollup
+   public void meaningfulContactRollup(Map<Id,Task> newMap,Map<Id,Task> oldMap){
+      List<Activity__c> ActivityList=new List<Activity__c>();
+      Set<id> activityId=new Set<Id>();
+      List<Id> activityListId=new List<Id>();
+      List<AggregateResult> aggregates=new List<AggregateResult>();
+      Map<String,Decimal> agMap=new Map<String,Decimal>();
+      
+      if(oldMap!=null){
+          for(Task t:newMap.values()){
+              if(t.whatid!=null && t.whatid.getSObjectType().getDescribe().getName()=='Activity__c' && newMap.get(t.id)!=oldMap.get(t.id)){
+                  activityId.add(t.whatid); 
+                  activityId.add(oldmap.get(t.id).whatid);             
+               }
+           }
+       }
+       else{
+           for(Task t:newMap.values()){
+              if(t.whatid!=null && t.whatid.getSObjectType().getDescribe().getName()=='Activity__c'){
+                  activityId.add(t.whatid);              
+               }
+           }
+            
+       
+       }
+       if(activityId.size()>0){
+           aggregates=[select count(id) total,whatid act from task where whatid=:activityId and status='completed' and sales_contact_method__c in('Phone Call - Result','Email - In') group by whatid];
+           
+        }
+        if(aggregates.size()>0){
+        for(AggregateResult ag:aggregates){
+               agMap.put((string)ag.get('act'),(Decimal)(ag.get('total')));
+           }
+       }
+       
+       if(activityId.size()>0){
+       for(Activity__c act:[Select id,name,meaningful_contacts__c from Activity__c where id=:activityId]){
+          if(agMap.containskey(act.id)){
+            act.meaningful_contacts__c=agMap.get(act.id);
+            ActivityList.add(act);
+          }
+       }
+       }
+       
+       if(ActivityList.size()>0){
+          try{
+           update ActivityList;
+          }
+          
+          catch(Exception e){
+             system.debug(e.getmessage());
+          }
+       }
+   
+   }
+
+}
